@@ -120,9 +120,28 @@ If you click on the “View script” you be able to see the [Lifecycle Configur
 *	Creates a directory called “jdbc” under home(/home/ec2-user) to download the jar files for various data sources
 *	Downloads jar for [Hive](https://mvnrepository.com/artifact/org.apache.hive/hive-jdbc/2.3.6), [Presto](https://prestodb.io/download.html), [Amazon Athena](https://docs.aws.amazon.com/athena/latest/ug/connect-with-jdbc.html), [Amazon Redshift](https://docs.aws.amazon.com/redshift/latest/mgmt/configure-jdbc-connection.html), [Aurora MySQL](https://downloads.mariadb.org/connector-java/)
 
-### 1. [Connect to Amazon EMR Hive and Presto from SageMaker R Kernel](CONNECT_HIVE_PRESTO.md)
+----
 
-### 2. Connect to Amazon Athena from SageMaker R Kernel
+## 1. [Connect to Amazon EMR Hive and Presto from SageMaker R Kernel](CONNECT_HIVE_PRESTO.md)
+
+----
+
+## 2. [Connect to Amazon Athena from SageMaker R Kernel](CONNECT_ATHENA.md)
+
+----
+
+## 3. [Connect to Amazon Redshift from SageMaker R Kernel](CONNECT_REDSHIFT.md)
+
+----
+
+## 4. [Connect to Amazon Aurora MySQL from SageMaker R Kernel](CONNECT_AURORA_MYSQL.md)
+
+----
+
+## Conclusion
+
+We showed you how you can connect to various data sources like 1) Hive, PrestoDB running on EMR 2) Amazon Athena 3) Amazon Redshift 4) Amazon Aurora MySQL in your environment to analyze, profile, run statistical computing using R from Amazon SageMaker. Although this example demonstrates connectivity to the above listed data sources but the same method can be extended to other data sources via JDBC.
+
 
 ## Code of Conduct
 
