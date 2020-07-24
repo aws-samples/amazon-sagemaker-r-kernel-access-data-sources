@@ -10,10 +10,6 @@ Here we show you how to connect to the following data sources from SageMaker R k
 4.	Amazon Redshift
 5.	Amazon Aurora MySQL
 
-
-* Change the title in this README
-* Edit your repository description on GitHub
-
 ## Solution Overview
 
 In order for us to build this solution we first need to [create VPC with public and private subnets](https://docs.aws.amazon.com/batch/latest/userguide/create-public-private-vpc.html) to create our own network where we can create resources. Next steps would involve creating 1) Data sources in the custom VPC and 2) Notebook Instance with all necessary configurations in order for the customers to connect various data sources using R program.
@@ -153,5 +149,4 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 
 ## License
 
-This library is licensed under the MIT-0 License. See the LICENSE file.
-
+This library is licensed under the MIT-0 License. See the [LICENSE](LICENSE) file.
