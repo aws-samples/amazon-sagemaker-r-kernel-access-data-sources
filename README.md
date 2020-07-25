@@ -134,6 +134,14 @@ If you click on the “View script” you be able to see the [Lifecycle Configur
 
 ----
 
+## Clean Up
+
+Go back to the CloudFormation page, click on the stack name and click "Delete" to clean up the resources created to avoid incurring charges when resources are not in use.
+
+![CF_CleanUp](images/CF_CleanUp.png)
+
+----
+
 ## Conclusion
 
 We showed you how you can connect to various data sources like 1) Hive, PrestoDB running on EMR 2) Amazon Athena 3) Amazon Redshift 4) Amazon Aurora MySQL in your environment to analyze, profile, run statistical computing using R from Amazon SageMaker. Although this example demonstrates connectivity to the above listed data sources but the same method can be extended to other data sources via JDBC.

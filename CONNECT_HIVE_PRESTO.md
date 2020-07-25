@@ -9,7 +9,6 @@ Make a note of the values for the following keys from the CloudFormation Outputs
 | EMRClusterDNSAddress | EMR cluster dns name |
 | EMRMasterInstanceId | EMR cluster master instance id |
 | SageMakerNotebookName | SageMaker notebook instance name |	
-| SageMakerRS3BucketName | SageMaker S3 data bucket |
 	
 Enter “Systems Manager” in the search bar of the AWS Console to navigate to the [AWS Systems Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-setting-up.html) page. Locate and click on “Session Manager” on the left pane under “Instances & Nodes” as shown below.
 
@@ -42,6 +41,7 @@ hive -e "INSERT INTO TABLE students VALUES ('fred flintstone', 35, 1.28), ('barn
 
 # Verify 
 hive -e "SELECT * from students;"
+exit
 exit
 ```
 
