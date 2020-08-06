@@ -22,7 +22,7 @@ Create data sources in the private subnet of the VPC to make sure they are not r
 
 Connect to Amazon EMR cluster in private subnet using [AWS Systems Manager Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html) to create Hive tables in the EMR cluster. 
 
-In order for us to execute code using the R kernel in Amazon SageMaker, create an Amazon SageMaker notebook. [Create a lifecycle configuration for the notebook](https://docs.aws.amazon.com/sagemaker/latest/dg/notebook-lifecycle-config.html) containing the set up script for R packages and JDBC drivers for the data sources and attach the lifecycle configuration to the Sagemaker notebook on start to make sure the set up in complete.
+In order for us to execute code using the R kernel in Amazon SageMaker, create an Amazon SageMaker notebook. Download the JDBC drivers for the data sources. [Create a lifecycle configuration for the notebook](https://docs.aws.amazon.com/sagemaker/latest/dg/notebook-lifecycle-config.html) containing the set up script for R packages, and attach the lifecycle configuration to the Sagemaker notebook on start to make sure the set up in complete.
 
 Finally we can use the AWS management console to navigate to the SageMaker Notebook to run code using the R kernel in order to access the data from various sources.
 
@@ -96,25 +96,27 @@ Make a note of the values for the following keys which is required for the rest 
 	
 ## SageMaker Notebook created with necessary R packages and jar files
 
-[Java Database Connectivity (JDBC)](https://en.wikipedia.org/wiki/Java_Database_Connectivity) is an [application programming interface (API)](https://en.wikipedia.org/wiki/Application_programming_interface) for the programming language [Java](https://en.wikipedia.org/wiki/Java_(programming_language)), which defines how a client may access a [database](https://en.wikipedia.org/wiki/Database). [RJDBC](https://cran.r-project.org/web/packages/RJDBC/index.html) is a package in R which allows the connectivity to various data sources using the JDBC interface. The [lifecycle configuration](https://docs.aws.amazon.com/sagemaker/latest/dg/notebook-lifecycle-config.html) of the notebook instance created by the cloudformation template makes sure that the necessary jar files Hive, Presto, Athena, Redhsift and MySQL are present in order to establish a JDBC connection.
+[Java Database Connectivity (JDBC)](https://en.wikipedia.org/wiki/Java_Database_Connectivity) is an [application programming interface (API)](https://en.wikipedia.org/wiki/Application_programming_interface) for the programming language [Java](https://en.wikipedia.org/wiki/Java_(programming_language)), which defines how a client may access a [database](https://en.wikipedia.org/wiki/Database). [RJDBC](https://cran.r-project.org/web/packages/RJDBC/index.html) is a package in R which allows the connectivity to various data sources using the JDBC interface. The notebook instance created by the cloudformation template makes sure that the necessary jar files Hive, Presto, Athena, Redhsift and MySQL are present in order to establish a JDBC connection.
 
-Navigate to SageMaker page and click on Notebook Instances and search on the Notebook name specified by the CloudFormation Output key “SageMakerNotebookName” to locate the right notebook. 
-
+1. On the Amazon SageMaker console, under **Notebook**, choose **Notebook instances**.
+2. Search for the notebook that matches the *_"SageMakerNotebookName"_* key you recorded earlier.
 ![SageMaker_Notebook_Locate](images/SageMaker_Notebook_Locate.png)
 
-Click on the notebook instance and locate the [lifecycle configuration](https://docs.aws.amazon.com/sagemaker/latest/dg/notebook-lifecycle-config.html) attached as shown below.  A lifecycle configuration allows you to install packages or sample notebooks on your notebook instance, configure networking and security for it, or otherwise use a shell script to customize it. A lifecycle configuration provides shell scripts that run only when you create the notebook instance or whenever you start one.
+3. Select the notebook instance.
+4. Click on “Open Jupyter” under “Actions” to locate the “jdbc” directory
+![SageMaker_Notebook_Locate](images/SageMaker_jdbc_dir.png)
+The Cloudformation template download the JAR files for [Hive](https://mvnrepository.com/artifact/org.apache.hive/hive-jdbc/2.3.6), [Presto](https://prestodb.io/download.html), [Amazon Athena](https://docs.aws.amazon.com/athena/latest/ug/connect-with-jdbc.html), [Amazon Redshift](https://docs.aws.amazon.com/redshift/latest/mgmt/configure-jdbc-connection.html), [Aurora MySQL](https://downloads.mariadb.org/connector-java/) in the “jdbc” directory.
+![SageMaker_Notebook_Locate](images/SageMaker_jars.png)
 
+5. Locate the [lifecycle configuration](https://docs.aws.amazon.com/sagemaker/latest/dg/notebook-lifecycle-config.html) attached.
+ 
+   A lifecycle configuration allows you to install packages or sample notebooks on your notebook instance, configure networking and security for it, or otherwise use a shell script to customize it. A lifecycle configuration provides shell scripts that run only when you create the notebook instance or whenever you start one.
 ![Sage_Maker_Click_LC](images/Sage_Maker_Click_LC.png)
 
-On the Lifecycle configuration page you will be able to view the script attached to the notebook.
-
+6. On the Lifecycle configuration page, choose View script to see the [Lifecycle Configuration Script](lc_scripts/SageMaker_LC_Script.sh) that sets up the R kernel in Amazon SageMaker to make JDBC connections to data sources using R.
 ![SageMaker_LC_VS](images/SageMaker_LC_VS.png)
 
-If you click on the “View script” you be able to see the [Lifecycle Configuration Script](lc_scripts/SageMaker_LC_Script.sh) which sets up the R kernel in SageMaker in order to make JDBC connections to data sources using R. It sets up the following in the SageMaker Notebook
-
-*	Installs [RJDBC package and dependencies in the Anaconda environment](https://anaconda.org/r/r-rjdbc)
-*	Creates a directory called “jdbc” under home(/home/ec2-user) to download the jar files for various data sources
-*	Downloads jar for [Hive](https://mvnrepository.com/artifact/org.apache.hive/hive-jdbc/2.3.6), [Presto](https://prestodb.io/download.html), [Amazon Athena](https://docs.aws.amazon.com/athena/latest/ug/connect-with-jdbc.html), [Amazon Redshift](https://docs.aws.amazon.com/redshift/latest/mgmt/configure-jdbc-connection.html), [Aurora MySQL](https://downloads.mariadb.org/connector-java/)
+   It installs [RJDBC package and dependencies in the Anaconda environment](https://anaconda.org/r/r-rjdbc) of the Amazon SageMaker notebook.
 
 ----
 
