@@ -22,12 +22,8 @@ Scroll down to the “Secret value” section and click on “Retrieve secret va
 
 In order to connect to the Aurora Cluster and run a query from the SageMaker R Kernel, navigate to the SageMaker Console and open the notebook as created by the Cloudformation Template. From the SageMaker console, click on the “Notebook instances” under “Notebook”. You can find the name of the notebook as specified by the value of the key **_“SageMakerNotebookName”_**. Under “Actions” click on the link which says “Open Jupyter” and click on “Upload” to upload the notebook below.
 
-<<<<<<< HEAD
 * Notebook Viewer : [aurora_connect.ipynb](https://nbviewer.jupyter.org/github/aws-samples/amazon-sagemaker-r-kernel-access-data-sources/blob/master/notebooks/aurora_connect.ipynb)
 * Notebook Link : [aurora_connect.ipynb](notebooks/aurora_connect.ipynb)
-=======
-[aurora_connect.ipynb](notebooks/aurora_connect.ipynb)
->>>>>>> 442a1050c73014ba0703537312009929c040e1e2
 
 OR Click on “New” and select “R” kernel to open a new SageMaker Notebook and run the above code.
 

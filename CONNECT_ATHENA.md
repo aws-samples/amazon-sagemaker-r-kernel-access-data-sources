@@ -8,12 +8,8 @@ Also you need to set the query result location in S3 as stated [here](https://do
 
 You can follow the example [here](https://docs.aws.amazon.com/athena/latest/ug/getting-started.html) to create a database / schema and table in Athena with the example S3 data. Similar to connecting to Hive, and Presto in EMR from Sagemaker R kernel, in order to establish a connection Amazon Athena to from SageMaker using the R kernel click on “Upload” to upload the notebook below.
 
-<<<<<<< HEAD
 * Notebook Viewer : [athena_connect.ipynb](https://nbviewer.jupyter.org/github/aws-samples/amazon-sagemaker-r-kernel-access-data-sources/blob/master/notebooks/athena_connect.ipynb)
 * Notebook Link : [athena_connect.ipynb](notebooks/athena_connect.ipynb)
-=======
-[athena_connect.ipynb](notebooks/athena_connect.ipynb)
->>>>>>> 442a1050c73014ba0703537312009929c040e1e2
 
 OR Click on “New” and select “R” kernel to open a new SageMaker Notebook and run the above code.
 
