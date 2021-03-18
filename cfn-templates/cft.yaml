@@ -1,0 +1,1269 @@
+---
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ''
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'VPC Parameters'
+        Parameters:
+          - ClassB
+      - Label:
+          default: 'SageMaker Notebook Parameters'
+        Parameters:
+          - SageMakeNotebookInstanceType
+      - Label:
+          default: 'Resource Creation'
+        Parameters:
+          - DeployEMR
+          - DeployRedshift
+          - DeployAuroraMySQL
+    ParameterLabels:
+      ClassB:
+        default: Choose Second Octet for Class B VPC Address (10.xxx.0.0/16)
+      SageMakeNotebookInstanceType:
+        default: SageMaker Jupyter Notebook Instance Type
+      DeployEMR:
+        default: Create EMR Cluster Automatically?
+      DeployRedshift:
+        default: Create Redshift Cluster Automatically?
+      DeployAuroraMySQL:
+        default: Create Aurora MySQL DB Cluster Automatically?
+
+Parameters:
+  ClassB:
+    Description: 'Class B of VPC (10.XXX.0.0/16)'
+    Type: Number
+    Default: 0
+    ConstraintDescription: 'Class B octet in the range of [0-255]'
+    MinValue: 0
+    MaxValue: 255
+  SageMakeNotebookInstanceType:
+    Description: 'Instance type for SageMaker notebook instance'
+    Type: String
+    Default: ml.t2.medium
+    AllowedValues:
+      - ml.t2.medium
+      - ml.t2.large
+      - ml.t3.medium
+      - ml.t3.large
+  DeployEMR:
+    Description: Choose 'Yes' if you prefer the EMR cluster created automatically rather than creating it manually
+    Type: String
+    Default: "Yes"
+    AllowedValues:
+      - "Yes"
+      - "No"
+  DeployRedshift:
+    Description: Choose 'Yes' if you prefer the Redshif cluster created automatically rather than creating it manually
+    Type: String
+    Default: "Yes"
+    AllowedValues:
+      - "Yes"
+      - "No"
+  DeployAuroraMySQL:
+    Description: Choose 'Yes' if you prefer the Aurora MySQL cluster created automatically rather than creating it manually
+    Type: String
+    Default: "Yes"
+    AllowedValues:
+      - "Yes"
+      - "No"
+
+Conditions:
+  ConditionEMRCluster: !Equals [ !Ref DeployEMR, "Yes" ]
+  ConditionRedshiftCluster: !Equals [ !Ref DeployRedshift, "Yes" ]
+  ConditionAuroraMySQL: !Equals [ !Ref DeployAuroraMySQL, "Yes" ]
+
+Mappings:
+  ClusterConfigurations:
+    aurora:
+      dbName: auroradb
+      nodeType: db.r5.large
+      dbEngine: aurora-mysql
+      dbFamily: aurora-mysql5.7
+    redshift:
+      dbName: redshiftdb
+      nodeType: dc2.large
+    emr:
+      dbName: hivedb
+      masterNodeType: m5.xlarge
+      coreNodeType: m5.xlarge
+      coreNodeCount: 1
+      emrReleaseVersion: emr-5.30.1
+
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Sub '10.${ClassB}.0.0/16'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: !Sub '${AWS::StackName}-VPC'
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub '${AWS::StackName}-IGW'
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  SubnetPublic:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Sub '10.${ClassB}.0.0/24'
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'public-subnet-1'
+  SubnetPrivate1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Sub '10.${ClassB}.10.0/24'
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'private-subnet-1'
+  SubnetPrivate2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Sub '10.${ClassB}.11.0/24'
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'private-subnet-2'
+  RouteTablePublic:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'public-route-table-1'
+  RouteTablePrivate1:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'private-route-table-1'
+  RouteTablePrivate2:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'private-route-table-2'
+  RouteTableAssociationPublic:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetPublic
+      RouteTableId: !Ref RouteTablePublic
+  RouteTableAssociationPrivate1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetPrivate1
+      RouteTableId: !Ref RouteTablePrivate1
+  RouteTableAssociationPrivate2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetPrivate2
+      RouteTableId: !Ref RouteTablePrivate2
+  RouteTablePublicInternetRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+  NatGatewayEIP1:
+    Type: 'AWS::EC2::EIP'
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+  NatGateway1:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP1.AllocationId
+      SubnetId: !Ref SubnetPublic
+  RouteTablePrivateInternetRoute1:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate1
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NatGateway1
+  NatGatewayEIP2:
+    Type: 'AWS::EC2::EIP'
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+  NatGateway2:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP2.AllocationId
+      SubnetId: !Ref SubnetPublic
+  RouteTablePrivateInternetRoute2:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate2
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NatGateway2
+  NetworkAclPublic:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'Public NACL'
+  NetworkAclPrivate1:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'Private NACL 1'
+  NetworkAclPrivate2:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: 'Private NACL 2'
+  SubnetNetworkAclAssociationPublic:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref SubnetPublic
+      NetworkAclId: !Ref NetworkAclPublic
+  SubnetNetworkAclAssociationPrivate1:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref SubnetPrivate1
+      NetworkAclId: !Ref NetworkAclPrivate1
+  SubnetNetworkAclAssociationPrivate2:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref SubnetPrivate2
+      NetworkAclId: !Ref NetworkAclPrivate2
+  NetworkAclEntryInPublicAllowAll:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPublic
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryOutPublicAllowAll:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPublic
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryInPrivateAllowVPC1:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPrivate1
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryOutPrivateAllowVP1:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPrivate1
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryInPrivateAllowVPC2:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPrivate2
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryOutPrivateAllowVP2:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPrivate2
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: '0.0.0.0/0'
+  NotebookSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Security group for SageMaker Jupyter instance'
+      VpcId: !Ref VPC
+  NotebookIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'sagemaker.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSQuicksightAthenaAccess'
+        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
+  NotebookIAMRolePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Roles:
+        - !Ref NotebookIAMRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Action: 
+              - 's3:*'
+            Resource:
+              - !GetAtt SageMakerRDataBucket.Arn
+              - !Join [ '', [ !GetAtt SageMakerRDataBucket.Arn, '/*' ]]
+  NotebookLifeCycleConfig:
+    Type: 'AWS::SageMaker::NotebookInstanceLifecycleConfig'
+    Properties:
+      OnCreate:
+        - Content:
+            Fn::Base64: |
+              #!/bin/bash
+
+              set -e
+
+              sudo -u ec2-user -i <<'EOF'
+ 
+              # This will affect only the Jupyter kernel called "R".
+              source activate R
+ 
+              # Replace myPackage with the name of the package you want to install.
+              # You can also perform "conda install" here as well.
+              conda install -y r-essentials r-base r-rjdbc
+               
+              source deactivate
+
+              WORKING_DIR=/home/ec2-user/SageMaker/jdbc
+
+              # Create directory to host JDBC jar files
+              mkdir -p "$WORKING_DIR"
+
+              # Download Hive JDBC Jar file for Hive connection on Amazon EMR
+              cd "$WORKING_DIR" && wget https://repo1.maven.org/maven2/org/apache/hive/hive-jdbc/2.3.6/hive-jdbc-2.3.6-standalone.jar
+
+              # Download Presto JBBC Jar file for Presto connection on Amazon EMR
+              cd "$WORKING_DIR" && wget https://repo1.maven.org/maven2/com/facebook/presto/presto-jdbc/0.232/presto-jdbc-0.232.jar
+
+              # Download Redshift JDBC Jar file for Amazon Redshift connection
+              cd "$WORKING_DIR" && wget https://s3.amazonaws.com/redshift-downloads/drivers/jdbc/1.2.45.1069/RedshiftJDBC42-no-awssdk-1.2.45.1069.jar
+
+              # Download Athena JDBC Jar file for Amazon Athena connection
+              cd "$WORKING_DIR" && wget https://s3.amazonaws.com/athena-downloads/drivers/JDBC/SimbaAthenaJDBC_2.0.9/AthenaJDBC42_2.0.9.jar
+
+              # Download MariaDB JDBC Jar file for Aurora MySQL connection
+              cd "$WORKING_DIR" && wget https://downloads.mariadb.com/Connectors/java/connector-java-2.6.0/mariadb-java-client-2.6.0.jar
+               
+              EOF
+      OnStart:
+        - Content:
+            Fn::Base64: |
+              #!/bin/bash
+
+              set -e
+
+              sudo -u ec2-user -i <<'EOF'
+ 
+              # This will affect only the Jupyter kernel called "R".
+              source activate R
+ 
+              # Replace myPackage with the name of the package you want to install.
+              # You can also perform "conda install" here as well.
+              conda install -y r-essentials r-base r-rjdbc
+               
+              source deactivate
+               
+              EOF
+  NotebookInstance:
+    DependsOn:
+      - NotebookIAMRole
+      - NotebookIAMRolePolicy
+    Type: 'AWS::SageMaker::NotebookInstance'
+    Properties:
+      InstanceType: !Ref SageMakeNotebookInstanceType
+      DirectInternetAccess: Enabled
+      RoleArn: !GetAtt NotebookIAMRole.Arn
+      SecurityGroupIds:
+        - !Ref NotebookSG
+      SubnetId: !Ref SubnetPrivate1
+      LifecycleConfigName: !GetAtt NotebookLifeCycleConfig.NotebookInstanceLifecycleConfigName
+  SageMakerRDataBucket:
+    Type: 'AWS::S3::Bucket'
+  CleanupS3Bucket:
+    Type: 'Custom::CleanUpBucket'
+    Properties:
+      ServiceToken: !GetAtt CleanupS3Function.Arn
+      inputBucketName: !Ref SageMakerRDataBucket
+  CleanupS3Function:
+    DependsOn:
+      - SageMakerRDataBucket
+      - CleanupS3FunctionLambdaRole
+      - CleanupS3FunctionLambdaPolicy
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Description: 'Clean-up SageMaker S3 data bucket'
+      Handler: index.lambda_handler
+      Runtime: python3.7
+      MemorySize: 128
+      Timeout: 60
+      Role: !GetAtt CleanupS3FunctionLambdaRole.Arn
+      Code:
+        ZipFile: !Sub |
+          import json
+          import boto3
+          import urllib3
+
+          def empty_bucket(bucket_name):
+              print("Attempting to empty the bucket {0}".format(bucket_name))
+              s3_client = boto3.client('s3')
+              s3 = boto3.resource('s3')
+
+              try:
+                  bucket = s3.Bucket(bucket_name).load()
+              except ClientError:
+                  print("Bucket {0} does not exist".format(bucket_name))
+                  return
+              # Confirm if versioning is enabled
+              version_status = s3_client.get_bucket_versioning(Bucket=bucket_name)
+              status = version_status.get('Status','')
+              if status == 'Enabled':
+                  version_status = s3_client.put_bucket_versioning(Bucket=bucket_name,
+                                                             VersioningConfiguration={'Status': 'Suspended'})
+              version_paginator = s3_client.get_paginator('list_object_versions')
+              version_iterator = version_paginator.paginate(
+                  Bucket=bucket_name
+              )
+
+              for page in version_iterator:
+                  print(page)
+                  if 'DeleteMarkers' in page:
+                      delete_markers = page['DeleteMarkers']
+                      if delete_markers is not None:
+                          for delete_marker in delete_markers:
+                              key = delete_marker['Key']
+                              versionId = delete_marker['VersionId']
+                              s3_client.delete_object(Bucket=bucket_name, Key=key, VersionId=versionId)
+                  if 'Versions' in page and page['Versions'] is not None:
+                      versions = page['Versions']
+                      for version in versions:
+                          print(version)
+                          key = version['Key']
+                          versionId = version['VersionId']
+                          s3_client.delete_object(Bucket=bucket_name, Key=key, VersionId=versionId)
+              object_paginator = s3_client.get_paginator('list_objects_v2')
+              object_iterator = object_paginator.paginate(
+                  Bucket=bucket_name
+              )
+              for page in object_iterator:
+                  if 'Contents' in page:
+                      for content in page['Contents']:
+                          key = content['Key']
+                          s3_client.delete_object(Bucket=bucket_name, Key=content['Key'])
+              print("Successfully emptied the bucket {0}".format(bucket_name))
+
+          def lambda_handler(event, context):
+              try:
+                  bucket = event['ResourceProperties']['inputBucketName']
+                  if event['RequestType'] == 'Delete':
+                      empty_bucket(bucket)
+                  sendResponse(event, context, "SUCCESS")
+              except Exception as e:
+                  print(e)
+                  sendResponse(event, context, "FAILED")
+
+          def sendResponse(event, context, status):
+              http = urllib3.PoolManager()
+              response_body = {'Status': status,
+                               'Reason': 'Log stream name: ' + context.log_stream_name,
+                               'PhysicalResourceId': context.log_stream_name,
+                               'StackId': event['StackId'],
+                               'RequestId': event['RequestId'],
+                               'LogicalResourceId': event['LogicalResourceId'],
+                               'Data': json.loads("{}")}
+              http.request('PUT', event['ResponseURL'], body=json.dumps(response_body))
+  CleanupS3FunctionLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Path: '/'
+  CleanupS3FunctionLambdaPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Roles:
+        - !Ref CleanupS3FunctionLambdaRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Action:
+              - 's3:*'
+            Resource:
+              - !GetAtt SageMakerRDataBucket.Arn
+              - !Join [ '', [ !GetAtt SageMakerRDataBucket.Arn, '/' ]]
+              - !Join [ '', [ !GetAtt SageMakerRDataBucket.Arn, '/*' ]]
+          - Effect: 'Deny'
+            Action:
+              - 's3:DeleteBucket'
+            Resource: '*'
+          - Effect: 'Allow'
+            Action:
+              - ec2:CreateNetworkInterface
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DeleteNetworkInterface
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: '*'
+  EMRMasterSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupDescription: 'Security group for EMR master'
+      VpcId: !Ref VPC
+  EMRSlaveSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupDescription: 'Security group for EMR slave'
+      VpcId: !Ref VPC
+  EMRServiceAccessSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupDescription: 'Security group for EMR service'
+      VpcId: !Ref VPC
+  EMRAccessSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupDescription: 'Security group for EMR access'
+      VpcId: !Ref VPC
+  EMRMasterIngressSelfIcmp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRMasterSG
+      IpProtocol: icmp
+      FromPort: -1
+      ToPort: -1
+      SourceSecurityGroupId: !Ref EMRMasterSG
+  EMRMasterIngressSelfAllTcp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRMasterSG
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref EMRMasterSG
+  EMRMasterIngressSelfAllUdp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRMasterSG
+      IpProtocol: udp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref EMRMasterSG
+  EMRMasterIngressServiceSg:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRMasterSG
+      IpProtocol: tcp
+      FromPort: 8443
+      ToPort: 8443
+      SourceSecurityGroupId: !Ref EMRServiceAccessSG
+  EMRMasterIngressSlaveIcmp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRMasterSG
+      IpProtocol: icmp
+      FromPort: -1
+      ToPort: -1
+      SourceSecurityGroupId: !Ref EMRSlaveSG
+  EMRMasterIngressSlaveAllTcp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRMasterSG
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref EMRSlaveSG
+  EMRMasterIngressSlaveAllUdp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRMasterSG
+      IpProtocol: udp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref EMRSlaveSG
+  EMRSlaveIngressSelfIcmp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRSlaveSG
+      IpProtocol: icmp
+      FromPort: -1
+      ToPort: -1
+      SourceSecurityGroupId: !Ref EMRSlaveSG
+  EMRSlaveIngressSelfAllTcp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRSlaveSG
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref EMRSlaveSG
+  EMRSlaveIngressSelfAllUdp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRSlaveSG
+      IpProtocol: udp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref EMRSlaveSG
+  EMRSlaveIngressServiceSg:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRSlaveSG
+      IpProtocol: tcp
+      FromPort: 8443
+      ToPort: 8443
+      SourceSecurityGroupId: !Ref EMRServiceAccessSG
+  EMRSlaveIngressMasterIcmp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRSlaveSG
+      IpProtocol: icmp
+      FromPort: -1
+      ToPort: -1
+      SourceSecurityGroupId: !Ref EMRMasterSG
+  EMRSlaveIngressMasterAllTcp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRSlaveSG
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref EMRMasterSG
+  EMRSlaveIngressMasterAllUdp:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRSlaveSG
+      IpProtocol: udp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref EMRMasterSG
+  EMRServiceIngressMaster:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRServiceAccessSG
+      IpProtocol: tcp
+      FromPort: 9443
+      ToPort: 9443
+      SourceSecurityGroupId: !Ref EMRMasterSG
+  EMRServiceEgressMaster:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRServiceAccessSG
+      IpProtocol: tcp
+      FromPort: 8443
+      ToPort: 8443
+      DestinationSecurityGroupId: !Ref EMRMasterSG
+  EMRServiceEgressSlave:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRServiceAccessSG
+      IpProtocol: tcp
+      FromPort: 8443
+      ToPort: 8443
+      DestinationSecurityGroupId: !Ref EMRSlaveSG
+  EMRAccessIngressNotebookHive:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRAccessSG
+      IpProtocol: tcp
+      FromPort: 10000
+      ToPort: 10000
+      SourceSecurityGroupId: !Ref NotebookSG
+  EMRAccessIngressNotebookPresto:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionEMRCluster
+    Properties:
+      GroupId: !Ref EMRAccessSG
+      IpProtocol: tcp
+      FromPort: 8889
+      ToPort: 8889
+      SourceSecurityGroupId: !Ref NotebookSG
+  EMRServiceIAMRole:
+    Type: 'AWS::IAM::Role'
+    Condition: ConditionEMRCluster
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - 'elasticmapreduce.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Path: '/'
+  EMRServiceIAMRolePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Condition: ConditionEMRCluster
+    Properties:
+      Roles:
+        - !Ref EMRServiceIAMRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Action:
+              - ec2:AuthorizeSecurityGroupEgress
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:CancelSpotInstanceRequests
+              - ec2:CreateNetworkInterface
+              - ec2:CreateSecurityGroup
+              - ec2:CreateTags
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteTags
+              - ec2:DescribeAvailabilityZones
+              - ec2:DescribeAccountAttributes
+              - ec2:DescribeDhcpOptions
+              - ec2:DescribeImages
+              - ec2:DescribeInstanceStatus
+              - ec2:DescribeInstances
+              - ec2:DescribeKeyPairs
+              - ec2:DescribeNetworkAcls
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribePrefixLists
+              - ec2:DescribeRouteTables
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSpotInstanceRequests
+              - ec2:DescribeSpotPriceHistory
+              - ec2:DescribeSubnets
+              - ec2:DescribeTags
+              - ec2:DescribeVpcAttribute
+              - ec2:DescribeVpcEndpoints
+              - ec2:DescribeVpcEndpointServices
+              - ec2:DescribeVpcs
+              - ec2:DetachNetworkInterface
+              - ec2:ModifyImageAttribute
+              - ec2:ModifyInstanceAttribute
+              - ec2:RequestSpotInstances
+              - ec2:RevokeSecurityGroupEgress
+              - ec2:RunInstances
+              - ec2:TerminateInstances
+              - ec2:DeleteVolume
+              - ec2:DescribeVolumeStatus
+              - ec2:DescribeVolumes
+              - ec2:DetachVolume
+              - iam:GetRole
+              - iam:GetRolePolicy
+              - iam:ListInstanceProfiles
+              - iam:ListRolePolicies
+              - s3:CreateBucket
+              - sdb:BatchPutAttributes
+              - sdb:Select
+              - cloudwatch:PutMetricAlarm
+              - cloudwatch:DescribeAlarms
+              - cloudwatch:DeleteAlarms
+              - application-autoscaling:RegisterScalableTarget
+              - application-autoscaling:DeregisterScalableTarget
+              - application-autoscaling:PutScalingPolicy
+              - application-autoscaling:DeleteScalingPolicy
+              - application-autoscaling:Describe*
+            Resource: '*'
+          - Effect: 'Allow'
+            Action:
+              - s3:GetBucketLocation
+              - s3:GetBucketCORS
+              - s3:GetObjectVersionForReplication
+              - s3:GetObject
+              - s3:GetBucketTagging
+              - s3:GetObjectVersion
+              - s3:GetObjectTagging
+              - s3:ListMultipartUploadParts
+              - s3:ListBucketByTags
+              - s3:ListBucket
+              - s3:ListObjects
+              - s3:ListBucketMultipartUploads
+            Resource:
+              - !Join [ '', [ !GetAtt SageMakerRDataBucket.Arn, '/*' ]]
+          - Effect: 'Allow'
+            Action:
+              - sqs:CreateQueue
+              - sqs:DeleteQueue
+              - sqs:DeleteMessage
+              - sqs:DeleteMessageBatch
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+              - sqs:PurgeQueue
+              - sqs:ReceiveMessage
+            Resource:
+              - !Sub arn:aws:sqs:*:${AWS::AccountId}:AWS-ElasticMapReduce-*
+          - Effect: 'Allow'
+            Action:
+              - iam:CreateServiceLinkedRole
+            Resource:
+              - arn:aws:iam::*:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot*
+            Condition:
+              StringLike:
+                iam:AWSServiceName: spot.amazonaws.com
+          - Effect: 'Allow'
+            Action:
+              - iam:PassRole
+            Resource:
+              - arn:aws:iam::*:role/EMR_AutoScaling_DefaultRole
+              - !GetAtt EMRJobFlowRole.Arn
+  EMRJobFlowRole:
+    Type: 'AWS::IAM::Role'
+    Condition: ConditionEMRCluster
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - 'ec2.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
+  EMRJobFlowRolePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Condition: ConditionEMRCluster
+    Properties:
+      Roles:
+        - !Ref EMRJobFlowRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Action:
+              - ec2:Describe*
+              - elasticmapreduce:Describe*
+              - elasticmapreduce:ListBootstrapActions
+              - elasticmapreduce:ListClusters
+              - elasticmapreduce:ListInstanceGroups
+              - elasticmapreduce:ListInstances
+              - elasticmapreduce:ListStep
+            Resource: '*'
+          - Effect: 'Allow'
+            Action:
+              - s3:GetBucketLocation
+              - s3:GetBucketCORS
+              - s3:GetObjectVersionForReplication
+              - s3:GetObject
+              - s3:GetBucketTagging
+              - s3:GetObjectVersion
+              - s3:GetObjectTagging
+              - s3:ListMultipartUploadParts
+              - s3:ListBucketByTags
+              - s3:ListBucket
+              - s3:ListObjects
+              - s3:ListBucketMultipartUploads
+              - s3:PutObject
+              - s3:PutObjectTagging
+              - s3:HeadBucket
+              - s3:DeleteObject
+            Resource:
+              - !Join [ '', [ !GetAtt SageMakerRDataBucket.Arn, '/*' ]]
+          - Effect: 'Allow'
+            Action:
+              - sqs:CreateQueue
+              - sqs:DeleteQueue
+              - sqs:DeleteMessage
+              - sqs:DeleteMessageBatch
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+              - sqs:PurgeQueue
+              - sqs:ReceiveMessage
+            Resource:
+              - !Sub arn:aws:sqs:*:${AWS::AccountId}:AWS-ElasticMapReduce-*
+  EMRJobFlowInstanceProfile:
+    DependsOn:
+      - EMRJobFlowRolePolicy
+    Type: 'AWS::IAM::InstanceProfile'
+    Condition: ConditionEMRCluster
+    Properties:
+      Roles:
+        - !Ref EMRJobFlowRole
+  EMRCluster:
+    DependsOn:
+      - RouteTablePrivateInternetRoute1
+      - RouteTablePrivateInternetRoute2
+      - EMRJobFlowRolePolicy
+      - EMRServiceIAMRolePolicy
+    Type: 'AWS::EMR::Cluster'
+    Condition: ConditionEMRCluster
+    Properties:
+      Name: !Sub emrCluster-${AWS::StackName}
+      ReleaseLabel: !FindInMap [ ClusterConfigurations, emr, emrReleaseVersion ]
+      JobFlowRole: !Ref EMRJobFlowInstanceProfile
+      ServiceRole: !Ref EMRServiceIAMRole
+      LogUri: !Sub s3://${SageMakerRDataBucket}/elasticmapreduce/logs
+      VisibleToAllUsers: true
+      Applications:
+        - Name: Hadoop
+        - Name: Spark
+        - Name: Livy
+        - Name: Hive
+        - Name: Tez
+        - Name: Presto
+      Instances:
+        MasterInstanceGroup:
+          Name: MasterInstance
+          InstanceCount: 1
+          InstanceType: !FindInMap [ ClusterConfigurations, emr, masterNodeType ]
+          Market: ON_DEMAND
+        CoreInstanceGroup:
+          Name: CoreInstance
+          InstanceCount: !FindInMap [ ClusterConfigurations, emr, coreNodeCount ]
+          InstanceType: !FindInMap [ ClusterConfigurations, emr, coreNodeType ]
+          Market: ON_DEMAND
+        TerminationProtected: false
+        Ec2SubnetId: !Ref SubnetPrivate1
+        EmrManagedMasterSecurityGroup: !Ref EMRMasterSG
+        EmrManagedSlaveSecurityGroup: !Ref EMRSlaveSG
+        ServiceAccessSecurityGroup: !Ref EMRServiceAccessSG
+        AdditionalMasterSecurityGroups:
+          - !Ref EMRAccessSG
+  EmrMasterInstanceId:
+    Type: 'Custom::EmrMasterInstanceId'
+    Condition: ConditionEMRCluster
+    Properties:
+      ServiceToken: !GetAtt EmrMasterInstanceIdFunction.Arn
+      inputEmrDns: !GetAtt EMRCluster.MasterPublicDNS
+  EmrMasterInstanceIdFunction:
+    DependsOn:
+      - EMRCluster
+      - EmrMasterInstanceIdFunctionLambdaRolePolicy
+    Type: 'AWS::Lambda::Function'
+    Condition: ConditionEMRCluster
+    Properties:
+      Description: 'Locate instance id for EMR master'
+      Handler: index.lambda_handler
+      Runtime: python3.7
+      MemorySize: 128
+      Timeout: 60
+      Role: !GetAtt EmrMasterInstanceIdFunctionLambdaRole.Arn
+      Environment:
+        Variables:
+          REGION: !Ref 'AWS::Region'
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          from os import environ
+          import json
+          import urllib3          
+
+          print("[INFO]", "Initialize function")
+          session = boto3.session.Session(region_name=environ["REGION"])
+          ec2 = session.client('ec2')
+          http = urllib3.PoolManager()          
+
+          def findEc2InstanceId(privateDns, regionName):
+              print("[INFO]", "Trying to find EC2 Instance Id for DNS: " +privateDns)
+              try:
+                  ec2Response = ec2.describe_instances(Filters=[
+                    {'Name': 'network-interface.private-dns-name', 'Values': [privateDns]}
+                    ])
+
+                  if len(ec2Response['Reservations']) > 0:
+                      print("[INFO]", "Found matching EC2 instances for DNS: " +privateDns)
+                      instanceIds = []
+                      for reservationElement in range(len(ec2Response['Reservations'])):
+                          instanceIds.append(ec2Response['Reservations'][reservationElement]['Instances'][0]['InstanceId'])
+                  else:
+                      print("[INFO]", "No matching EC2 instances for DNS: " +privateDns)
+                      instanceIds = None
+
+                  return instanceIds          
+
+              except Exception as e:
+                  print("[ERROR]", e)          
+
+          def sendResponse(event, context, status, data, reason):
+              response_body = {'Status': status,
+                               'Reason': reason,
+                               'PhysicalResourceId': context.log_stream_name,
+                               'StackId': event['StackId'],
+                               'RequestId': event['RequestId'],
+                               'LogicalResourceId': event['LogicalResourceId'],
+                               'Data': data}
+              http.request('PUT', event['ResponseURL'], body=json.dumps(response_body))          
+
+          def lambda_handler(event, context):
+              print("[INFO]", "Locating EC2 Instance Id")          
+
+              try:
+                  EmrMasterDns = event["ResourceProperties"]["inputEmrDns"]
+                  Region = environ["REGION"]
+
+                  response_data = {}          
+
+                  # Find EC2 Instance Id
+                  if event["RequestType"] == 'Create':
+                      EmrMasterInstanceId = findEc2InstanceId(EmrMasterDns, Region)
+                      if EmrMasterInstanceId != None:
+                          response_status = "SUCCESS"
+                          response_reason = "Located EC2 Instance Id"
+                      elif EmrMasterInstanceId == None:
+                          response_status = "SUCCESS"
+                          response_reason = "Could not find EC2 Instance Id"
+
+                      response_data['emrMasterInstanceId'] = EmrMasterInstanceId
+                  elif event["RequestType"] == 'Delete':
+                      response_status = "SUCCESS"
+                      response_reason = "No action needed for Delete"
+
+                  sendResponse(event, context, response_status, response_data, response_reason)
+              except Exception as e:
+                  print("[ERROR]", e)
+                  response_data = {}
+                  sendResponse(event, context, "FAILED", response_data, e)          
+
+              print("[INFO]", "Execution complete")
+  EmrMasterInstanceIdFunctionLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Condition: ConditionEMRCluster
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Path: '/'
+  EmrMasterInstanceIdFunctionLambdaRolePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Condition: ConditionEMRCluster
+    Properties:
+      Roles:
+        - !Ref EmrMasterInstanceIdFunctionLambdaRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Action:
+              - ec2:CreateNetworkInterface
+              - ec2:DescribeInstances
+              - ec2:DeleteNetworkInterface
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: '*'
+  RedShiftSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Condition: ConditionRedshiftCluster
+    Properties:
+      GroupDescription: 'Security group for Redshift cluster'
+      VpcId: !Ref VPC
+  RedshiftSGIngressNotebook:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionRedshiftCluster
+    Properties:
+      GroupId: !Ref RedShiftSG
+      IpProtocol: tcp
+      FromPort: 5439
+      ToPort: 5439
+      SourceSecurityGroupId: !Ref NotebookSG
+  RedshiftSubnetGroup:
+    Type: 'AWS::Redshift::ClusterSubnetGroup'
+    Condition: ConditionRedshiftCluster
+    Properties:
+      Description: 'Redshift cluster subnet group'
+      SubnetIds:
+        - !Ref SubnetPrivate1
+  RedshiftCreds:
+    Type: 'AWS::SecretsManager::Secret'
+    Condition: ConditionRedshiftCluster
+    Properties:
+      Description: !Sub Redshift cluster master user credentials for ${AWS::StackName}
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "redshiftmasteruser"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 16
+        ExcludePunctuation: true
+  RedshiftCluster:
+    Type: 'AWS::Redshift::Cluster'
+    Condition: ConditionRedshiftCluster
+    Properties:
+      ClusterIdentifier: !Sub ${AWS::StackName}-Redshift-Cluster
+      DBName: !FindInMap [ ClusterConfigurations, redshift, dbName ]
+      MasterUsername: !Join [ '', [ '{{resolve:secretsmanager:', !Ref RedshiftCreds, ':SecretString:username}}' ]]
+      MasterUserPassword: !Join [ '', [ '{{resolve:secretsmanager:', !Ref RedshiftCreds, ':SecretString:password}}' ]]
+      NodeType: !FindInMap [ ClusterConfigurations, redshift, nodeType ]
+      ClusterType: single-node
+      PubliclyAccessible: false
+      VpcSecurityGroupIds:
+        - !Ref RedShiftSG
+      ClusterSubnetGroupName: !Ref RedshiftSubnetGroup
+  AuroraCreds:
+    Type: 'AWS::SecretsManager::Secret'
+    Condition: ConditionAuroraMySQL
+    Properties:
+      Description: !Sub Aurora master user credentials for ${AWS::StackName}
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "auroramasteruser"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 16
+        ExcludePunctuation: true
+  AuroraDBClusterParams:
+    Type: 'AWS::RDS::DBClusterParameterGroup'
+    Condition: ConditionAuroraMySQL
+    Properties:
+      Description: !Sub ${AWS::StackName} cluster parameter group
+      Family: !FindInMap [ ClusterConfigurations, aurora, dbFamily ]
+      Parameters:
+        character_set_database: utf8
+  AuroraDBParams:
+    Type: 'AWS::RDS::DBParameterGroup'
+    Condition: ConditionAuroraMySQL
+    Properties:
+      Description: !Sub ${AWS::StackName} db instance parameter group
+      Family: !FindInMap [ ClusterConfigurations, aurora, dbFamily ]
+  AuroraSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Condition: ConditionAuroraMySQL
+    Properties:
+      DBSubnetGroupDescription: 'RDS DB subnet group for private subnets'
+      SubnetIds:
+        - !Ref SubnetPrivate1
+        - !Ref SubnetPrivate2
+  AuroraRDSSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Condition: ConditionAuroraMySQL
+    Properties:
+      GroupDescription: 'Security group for Aurora RDS instance'
+      VpcId: !Ref VPC
+  AuroraRDSSecurityGroupIngressNotebook:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: ConditionAuroraMySQL
+    Properties:
+      GroupId: !Ref AuroraRDSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref NotebookSG
+  AuroraRDSDBCluster:
+    Type: 'AWS::RDS::DBCluster'
+    Condition: ConditionAuroraMySQL
+    DeletionPolicy: Delete
+    Properties:
+      DBClusterIdentifier: !Sub ${AWS::StackName}-AuroraDB-Cluster
+      Engine: !FindInMap [ ClusterConfigurations, aurora, dbEngine ]
+      DBClusterParameterGroupName: !Ref AuroraDBClusterParams
+      DBSubnetGroupName: !Ref AuroraSubnetGroup
+      BackupRetentionPeriod: 1
+      MasterUsername: !Join [ '', [ '{{resolve:secretsmanager:', !Ref AuroraCreds, ':SecretString:username}}' ]]
+      MasterUserPassword: !Join [ '', [ '{{resolve:secretsmanager:', !Ref AuroraCreds, ':SecretString:password}}' ]]
+      DatabaseName: !FindInMap [ ClusterConfigurations, aurora, dbName ]
+      VpcSecurityGroupIds:
+        - !Ref AuroraRDSSecurityGroup
+  AuroraRDSDBWriter:
+    Type: 'AWS::RDS::DBInstance'
+    Condition: ConditionAuroraMySQL
+    Properties:
+      DBInstanceIdentifier: !Sub ${AWS::StackName}-AuroraDB-Instance-Node-01
+      DBClusterIdentifier: !Ref AuroraRDSDBCluster
+      DBParameterGroupName: !Ref AuroraDBParams
+      DBInstanceClass: !FindInMap [ ClusterConfigurations, aurora, nodeType ]
+      Engine: !FindInMap [ ClusterConfigurations, aurora, dbEngine ]
+      PubliclyAccessible: false
+
+Outputs:
+  VPCandCIDR:
+    Description: 'VPC ID and CIDR block'
+    Value: !Join [' - ', [!Ref VPC, !GetAtt VPC.CidrBlock]]
+  PublicSubnets:
+    Description: 'Public subnet(s)'
+    Value: !Ref SubnetPublic
+  PrivateSubnets:
+    Description: 'Private subnet(s)'
+    Value: !Join [', ', [!Ref SubnetPrivate1, !Ref SubnetPrivate2]]
+  SageMakerNotebookName:
+    Description: 'SageMaker notebook instance name'
+    Value: !GetAtt NotebookInstance.NotebookInstanceName
+  SageMakerRS3BucketName:
+    Description: 'SageMaker S3 data bucket'
+    Value: !Ref SageMakerRDataBucket
+  EMRMasterInstanceId:
+    Description: 'EMR cluster master instance id'
+    Value: !If [ ConditionEMRCluster, !Select [ 0, !GetAtt EmrMasterInstanceId.emrMasterInstanceId ], "" ]
+  EMRClusterDNSAddress:
+    Description: 'EMR cluster dns name'
+    Value: !If [ ConditionEMRCluster, !GetAtt EMRCluster.MasterPublicDNS, "" ]
+  RedshiftClusterEndpointWithPort:
+    Description: 'Redshift cluster endpoint address with port number'
+    Value: !If [ ConditionRedshiftCluster, !Join [ ":", [ !GetAtt RedshiftCluster.Endpoint.Address, !GetAtt RedshiftCluster.Endpoint.Port ]], "" ]
+  RedshiftClusterDBName:
+    Description: 'Redshift cluster database name'
+    Value: !If [ ConditionRedshiftCluster, !FindInMap [ ClusterConfigurations, redshift, dbName ], "" ]
+  RedshiftClusterSecret:
+    Description: 'Redshift cluster credentials secret ARN'
+    Value: !If [ ConditionRedshiftCluster, !Ref RedshiftCreds, "" ]
+  AuroraClusterEndpointWithPort:
+    Description: 'Aurora cluster endpoint address with port number'
+    Value: !If [ ConditionAuroraMySQL, !Join [ ":", [ !GetAtt AuroraRDSDBCluster.Endpoint.Address, !GetAtt AuroraRDSDBCluster.Endpoint.Port ]], "" ]
+  AuroraClusterDBName:
+    Description: 'Aurora cluster database name'
+    Value: !If [ ConditionAuroraMySQL, !FindInMap [ ClusterConfigurations, aurora, dbName ], "" ]
+  AuroraClusterSecret:
+    Description: 'Aurora cluster credentials secret ARN'
+    Value: !If [ ConditionAuroraMySQL, !Ref AuroraCreds, "" ]
