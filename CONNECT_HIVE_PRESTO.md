@@ -55,8 +55,12 @@ In order for us to query the data from EMR using SageMaker R Kernel, navigate to
 
 In order to demonstrate connectivity from the SageMaker R Kernel either click on “Upload” to upload the notebook below. 
 
+<<<<<<< HEAD
 * Notebook Viewer : [hive_connect.ipynb](https://nbviewer.jupyter.org/github/aws-samples/amazon-sagemaker-r-kernel-access-data-sources/blob/master/notebooks/presto_connect.ipynb)
 * Notebook Link : [hive_connect.ipynb](notebooks/hive_connect.ipynb)
+=======
+[hive_connect.ipynb](notebooks/hive_connect.ipynb)
+>>>>>>> 442a1050c73014ba0703537312009929c040e1e2
 
 ![SageMaker_Upload_Notebook](images/SageMaker_Upload_Notebook.png)
 

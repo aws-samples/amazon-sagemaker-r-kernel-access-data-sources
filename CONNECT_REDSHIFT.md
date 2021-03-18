@@ -32,8 +32,12 @@ INSERT INTO public.students VALUES ('fred flintstone', 35, 1.28), ('barney rubbl
 
 Navigate to the SageMaker Console to open the notebook as created by the Cloudformation Template in order to connect to the Redshift cluster and query the table created above using the SageMaker R Kernel. From the SageMaker console, click on the “Notebook instances” under “Notebook”. You can find the name of the notebook as specified by the value of the key **_“SageMakerNotebookName”_**. Under “Actions” click on the link which says “Open Jupyter” and click on “Upload” to upload the notebook below.
 
+<<<<<<< HEAD
 * Notebook Viewer : [redshift_connect.ipynb](https://nbviewer.jupyter.org/github/aws-samples/amazon-sagemaker-r-kernel-access-data-sources/blob/master/notebooks/redshift_connect.ipynb)
 * Notebook Link : [redshift_connect.ipynb](notebooks/redshift_connect.ipynb)
+=======
+[redshift_connect.ipynb](notebooks/redshift_connect.ipynb)
+>>>>>>> 442a1050c73014ba0703537312009929c040e1e2
 
 OR Click on “New” and select “R” kernel to open a new SageMaker Notebook and run the above code.
 
