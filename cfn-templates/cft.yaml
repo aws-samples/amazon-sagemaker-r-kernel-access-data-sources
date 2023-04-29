@@ -369,20 +369,25 @@ Resources:
               mkdir -p "$WORKING_DIR"
 
               # Download Hive JDBC Jar file for Hive connection on Amazon EMR
-              cd "$WORKING_DIR" && wget https://repo1.maven.org/maven2/org/apache/hive/hive-jdbc/2.3.6/hive-jdbc-2.3.6-standalone.jar
+              #cd "$WORKING_DIR" && wget https://repo1.maven.org/maven2/org/apache/hive/hive-jdbc/2.3.6/hive-jdbc-2.3.6-standalone.jar
+              cd "$WORKING_DIR" && wget https://repo1.maven.org/maven2/org/apache/hive/hive-jdbc/3.1.3/hive-jdbc-3.1.3-standalone.jar
 
               # Download Presto JBBC Jar file for Presto connection on Amazon EMR
-              cd "$WORKING_DIR" && wget https://repo1.maven.org/maven2/com/facebook/presto/presto-jdbc/0.232/presto-jdbc-0.232.jar
+              #cd "$WORKING_DIR" && wget https://repo1.maven.org/maven2/com/facebook/presto/presto-jdbc/0.232/presto-jdbc-0.232.jar
+              cd "$WORKING_DIR" && wget https://repo1.maven.org/maven2/com/facebook/presto/presto-jdbc/0.281/presto-jdbc-0.281.jar
 
               # Download Redshift JDBC Jar file for Amazon Redshift connection
-              cd "$WORKING_DIR" && wget https://s3.amazonaws.com/redshift-downloads/drivers/jdbc/1.2.45.1069/RedshiftJDBC42-no-awssdk-1.2.45.1069.jar
+              #cd "$WORKING_DIR" && wget https://s3.amazonaws.com/redshift-downloads/drivers/jdbc/1.2.45.1069/RedshiftJDBC42-no-awssdk-1.2.45.1069.jar
+              cd "$WORKING_DIR" && wget https://s3.amazonaws.com/redshift-downloads/drivers/jdbc/2.1.0.14/redshift-jdbc42-2.1.0.14.jar
 
               # Download Athena JDBC Jar file for Amazon Athena connection
-              cd "$WORKING_DIR" && wget https://s3.amazonaws.com/athena-downloads/drivers/JDBC/SimbaAthenaJDBC_2.0.9/AthenaJDBC42_2.0.9.jar
+              #cd "$WORKING_DIR" && wget https://s3.amazonaws.com/athena-downloads/drivers/JDBC/SimbaAthenaJDBC_2.0.9/AthenaJDBC42_2.0.9.jar
+              cd "$WORKING_DIR" && wget https://s3.amazonaws.com/athena-downloads/drivers/JDBC/SimbaAthenaJDBC-2.0.36.1000/AthenaJDBC42-2.0.36.1000.jar
 
               # Download MariaDB JDBC Jar file for Aurora MySQL connection
-              cd "$WORKING_DIR" && wget https://downloads.mariadb.com/Connectors/java/connector-java-2.6.0/mariadb-java-client-2.6.0.jar
-               
+              #cd "$WORKING_DIR" && wget https://downloads.mariadb.com/Connectors/java/connector-java-2.6.0/mariadb-java-client-2.6.0.jar
+              cd "$WORKING_DIR" && wget https://downloads.mariadb.com/Connectors/java/connector-java-3.1.3/mariadb-java-client-3.1.3.jar
+
               EOF
       OnStart:
         - Content:
